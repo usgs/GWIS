@@ -547,7 +547,8 @@ GWIS._checkOpts = function _checkOpts( opts ) {
             checkOpt( ser, "tsid", "string", undefined );
             //if ( ser.tsid===undefined) { throw new Error(funcName+"series option 'site' OR 'tsid' is required to specify what site to retrieve data for"); }
             if ( /\D/.test(ser.tsid)  ) { throw new Error(funcName+"series option 'tsid' must be all digits"); }
-            label = ser.tsid;
+            //store major filter for use as a default label
+            ser.majorFilter = ser.tsid;
         }
         
         //..............
@@ -567,7 +568,8 @@ GWIS._checkOpts = function _checkOpts( opts ) {
             checkOpt( ser, "pcode", "string", undefined );
             if ( ser.pcode === undefined    ) { throw new Error(funcName+"series option 'pcode' is required to specify what site data to retrieve and plot"); }
             if ( !/^\d{5}$/.test(ser.pcode) ) { throw new Error(funcName+"series option 'pcode' must be 5 digits"); }
-            label = ser.site+" "+ser.pcode;
+            //store major filter for use as a default label
+            ser.majorFilter = ser.site+"_"+ser.pcode;
         }
         
         //......................................
@@ -590,7 +592,7 @@ GWIS._checkOpts = function _checkOpts( opts ) {
         // label [string]
         //   label to display in legend
         //   series labels (including those assigned by default) must be distinct
-        checkOpt( ser, "label", "string", label+( ser.dv_stat ? " "+ser.dv_stat : "") );
+        checkOpt( ser, "label", "string", ser.majorFilter+( ser.dv_stat ? " "+ser.dv_stat : "") );
         ser.label = $.trim( ser.label );
         if (ser.label==="") {
             throw new Error(funcName+"series option 'label' must be a non-empty string");
@@ -1326,22 +1328,22 @@ GWIS._refreshPlot = function (plot) {
 
     $.each( plot.opts.series, function(idx,ser) {
 
-        var majorFilter;
-        if (ser.site) majorFilter = "&sites="+ser.site + "&parmCd="+ser.pcode;
-        if (ser.tsid) majorFilter = "&tsid="+ser.tsid;
+        var query;
+        if (ser.site) query = "&sites="+ser.site + "&parmCd="+ser.pcode;
+        if (ser.tsid) query = "&tsid="+ser.tsid;
         
         // service call
-        GWIS._console(funcName+ majorFilter + " pcode='"+ser.pcode+"': requesting data from water services");
+        GWIS._console(funcName+ query + "': requesting data from water services");
         $.ajax({
             "type"     : "GET",
-            "url"      : url + majorFilter + (ser.dv_stat!==undefined ? "&statCd="+ser.dv_stat : ""), // add site, pcode, and dv_stat (DV only) for this series
+            "url"      : url + query + (ser.dv_stat!==undefined ? "&statCd="+ser.dv_stat : ""), // add site, pcode, and dv_stat (DV only) for this series
             "dataType" : "text",
             "async"    : true,
             "timeout"  : 2*60*1000, // millisec
             "error": function(err) {
                 
                 // service error
-                GWIS._console(funcName+"site='"+ser.site+"' pcode='"+ser.pcode+"': water services request failed - series not included in plot: "+err.statusText,"warn");
+                GWIS._console(funcName+ query + "': water services request failed - series not included in plot: "+err.statusText,"warn");
                 
             },
             "success": function(txt) {
@@ -1349,10 +1351,10 @@ GWIS._refreshPlot = function (plot) {
                 // check response has data
                 if ( /^#  No sites found/.test(txt) ) {
                     // no data
-                    GWIS._console(funcName+"site='"+ser.site+"' pcode='"+ser.pcode+"': water services request returned no data - series not shown in plot","warn");
+                    GWIS._console(funcName+ query + "': water services request returned no data - series not shown in plot","warn");
                 } else {
                     // have some data - add to combined rdb
-                    GWIS._console(funcName+"site='"+ser.site+"' pcode='"+ser.pcode+"': water services request returned data");
+                    GWIS._console(funcName+ query + "': water services request returned data");
                     rdb += txt;
                 }
                 
@@ -1447,6 +1449,7 @@ GWIS._refreshPlot = function (plot) {
 //   returns plot with data array added upon success
 //   throws error if problem
 GWIS._parseRDB = function ( plot, rdb ) {
+
     var funcName = "[_parseRDB]: '" + plot.opts.div_id + "': ";
     
     // check that have data for at least 1 plot series
@@ -1483,6 +1486,7 @@ GWIS._parseRDB = function ( plot, rdb ) {
     var Y    = {};  // obj of data for each series - these need to be combined into single plot data array lined up in time
     var Icol = {};  // column index lookup
     var pcode_stat; // parsed data uniquely identified by "site_pcode_stat" (dv) or "site_pcode" (iv)
+    var tsid; // parsed data uniquely identified by "tsid""
     $.each( rdb.split(/\n/), function(idx,line) { // loop through lines
         
         // skip comment, format, and blank lines
@@ -1528,13 +1532,20 @@ GWIS._parseRDB = function ( plot, rdb ) {
             // set pcode_stat for series id
             //pcode_stat = vals[Icol["val"]].replace(/^[0-9]+_/,""); // get rid of tsid
 
-            //keep this, as it is the true ID
-            pcode_stat = vals[Icol["val"]]
+            //keep tsid, as it is the true ID
+            tsid = vals[Icol["val"]].split('_')[0];
+
+            //we need to store the unique ID tsid back into the series if it is not there
+            $.each( plot.opts.series, function(idx,ser) {
+                if (ser.site && !ser.tsid) {
+                    ser.tsid = tsid;
+                }
+            });
 
             // skip to a data line
             return true;
         }
-        
+      
         // data line - parse values
         var site = vals[Icol["site"]];
         var date = vals[Icol["date"]];
@@ -1613,7 +1624,7 @@ GWIS._parseRDB = function ( plot, rdb ) {
         
         // add value for this series
         //var series_id = site+"_"+pcode_stat;
-        var series_id = pcode_stat;
+        var series_id = tsid;
         if ( Y[series_id] === undefined ) {
             Y[series_id] = {
                 "data" : {},
@@ -1650,8 +1661,8 @@ GWIS._parseRDB = function ( plot, rdb ) {
     plot.data_y1min = +Infinity; plot.data_y1max = -Infinity; 
     plot.data_y2min = +Infinity; plot.data_y2max = -Infinity; 
     $.each( plot.opts.series, function(idx,ser) {
-        // var series_id = ser.site+"_"+ser.pcode+(ser.dv_stat?"_"+ser.dv_stat:""); // site_pcode_stat
-        var series_id = pcode_stat;
+        //var series_id = ser.site+"_"+ser.pcode+(ser.dv_stat?"_"+ser.dv_stat:""); // site_pcode_stat
+        var series_id = ser.tsid+(ser.dv_stat?"_"+ser.dv_stat:""); // site_pcode_stat
         series_ids.push( series_id );
         if (Y[series_id] !== undefined) {
             if (ser.axis==="y1") {
