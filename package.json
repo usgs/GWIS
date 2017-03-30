@@ -1,0 +1,28 @@
+{
+  "name": "GWIS",
+  "version": "0.0.0",
+  "description": "USGS GWIS",
+  "devDependencies": {
+  },
+  "main": "dist/gwis-plot-utils.js",
+  "style": "dist/gwis-plot-utils.css",
+  "files": [
+    "dist/*"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/usgs/GWIS.git"
+  },
+  "keywords": [
+    "usgs",
+    "gwis"
+  ],
+  "contributors": [
+    {
+      "name": "Joe Vrabel",
+      "email": "jvrabel@usgs.gov"
+    }
+  ],
+  "license": "MIT",
+  "readmeFilename": "README.md"
+}
