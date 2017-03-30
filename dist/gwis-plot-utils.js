@@ -1486,8 +1486,15 @@ GWIS._parseRDB = function ( plot, rdb ) {
     var Y    = {};  // obj of data for each series - these need to be combined into single plot data array lined up in time
     var Icol = {};  // column index lookup
     var pcode_stat; // parsed data uniquely identified by "site_pcode_stat" (dv) or "site_pcode" (iv)
-    var tsid; // parsed data uniquely identified by "tsid""
+    var pcode; // unique pcode value
+    var tsid; // unique tsid value
+    var siteID; //need to grab siteID from header row
     $.each( rdb.split(/\n/), function(idx,line) { // loop through lines
+        
+        //we need to get siteID from the header.  hopefully there is a better way to do this
+        if (line.indexOf('Data provided for site') != -1) {
+            siteID = line.split('Data provided for site ')[1];
+        }
         
         // skip comment, format, and blank lines
         line = $.trim(line);
@@ -1533,12 +1540,15 @@ GWIS._parseRDB = function ( plot, rdb ) {
             //pcode_stat = vals[Icol["val"]].replace(/^[0-9]+_/,""); // get rid of tsid
 
             //keep tsid, as it is the true ID
-            tsid = vals[Icol["val"]].split('_')[0];
+            [tsid,pcode] = vals[Icol["val"]].split('_');
+
+            console.log('Processing site',siteID,'tsid',tsid,'pcode',pcode)
 
             //we need to store the unique ID tsid back into the series if it is not there
             $.each( plot.opts.series, function(idx,ser) {
-                if (ser.site && !ser.tsid) {
+                if (ser.site === siteID && ser.pcode === pcode && !ser.tsid) {
                     ser.tsid = tsid;
+                    console.log('adding tsid',tsid,ser)
                 }
             });
 
@@ -1625,6 +1635,7 @@ GWIS._parseRDB = function ( plot, rdb ) {
         // add value for this series
         //var series_id = site+"_"+pcode_stat;
         var series_id = tsid;
+        //console.log('writing data',tsid)
         if ( Y[series_id] === undefined ) {
             Y[series_id] = {
                 "data" : {},
@@ -1663,6 +1674,7 @@ GWIS._parseRDB = function ( plot, rdb ) {
     $.each( plot.opts.series, function(idx,ser) {
         //var series_id = ser.site+"_"+ser.pcode+(ser.dv_stat?"_"+ser.dv_stat:""); // site_pcode_stat
         var series_id = ser.tsid+(ser.dv_stat?"_"+ser.dv_stat:""); // site_pcode_stat
+        console.log('checking ranges',ser.tsid,Y[series_id])
         series_ids.push( series_id );
         if (Y[series_id] !== undefined) {
             if (ser.axis==="y1") {
